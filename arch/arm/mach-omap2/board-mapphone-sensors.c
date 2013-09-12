@@ -49,6 +49,8 @@
 #define PROXIMITY_SFH7743		0
 #define PROXIMITY_ISL29030		1
 
+static u8 prox_sensor_type = PROXIMITY_SFH7743;
+
 /*
  * Vibe
  */
@@ -121,6 +123,146 @@ static void mapphone_vibrator_init(void)
 	gpio_direction_output(vibrator_gpio, 0);
 	omap_cfg_reg(Y4_34XX_GPIO181);
 }
+
+/*
+ * LIS331DLH
+ */
+
+static struct regulator *mapphone_lis331dlh_regulator;
+static int mapphone_lis331dlh_initialization(void)
+{
+	struct regulator *reg;
+	reg = regulator_get(NULL, "vhvio");
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+	mapphone_lis331dlh_regulator = reg;
+	return 0;
+}
+
+static void mapphone_lis331dlh_exit(void)
+{
+	regulator_put(mapphone_lis331dlh_regulator);
+}
+
+static int mapphone_lis331dlh_power_on(void)
+{
+	return regulator_enable(mapphone_lis331dlh_regulator);
+}
+
+static int mapphone_lis331dlh_power_off(void)
+{
+	if (mapphone_lis331dlh_regulator)
+		return regulator_disable(mapphone_lis331dlh_regulator);
+	return 0;
+}
+
+struct lis331dlh_platform_data mapphone_lis331dlh_data = {
+	.init = mapphone_lis331dlh_initialization,
+	.exit = mapphone_lis331dlh_exit,
+	.power_on = mapphone_lis331dlh_power_on,
+	.power_off = mapphone_lis331dlh_power_off,
+
+	.min_interval   = 1,
+	.poll_interval  = 200,
+
+	.g_range        = LIS331DLH_G_8G,
+
+	.axis_map_x     = 0,
+	.axis_map_y     = 1,
+	.axis_map_z     = 2,
+
+	.negate_x       = 0,
+	.negate_y       = 0,
+	.negate_z       = 0,
+};
+
+/* 
+ * SFH7743 
+ */
+static char *prox_get_pwr_supply(void)
+{
+	char *prox_regulator = "vsdio";
+#ifdef CONFIG_ARM_OF
+	const void *pwr_supply_prop;
+	struct device_node *prox_node = of_find_node_by_path("/System@0/PROX@0");
+
+	if (prox_node) {
+		pwr_supply_prop = of_get_property(prox_node, "pwr_supply", NULL);
+		if (pwr_supply_prop) {
+			if (*(u32 *)pwr_supply_prop == 0x0)
+				prox_regulator = "vrf1";
+			else if  (*(u32 *)pwr_supply_prop == 0x1)
+				prox_regulator = "vsdio";
+			}
+		of_node_put(prox_node);
+	}
+
+#endif
+	return prox_regulator;
+}
+
+static struct regulator *mapphone_sfh7743_regulator;
+static int mapphone_sfh7743_initialization(void)
+{
+	struct regulator *reg;
+	reg = regulator_get(NULL, prox_get_pwr_supply());
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+	mapphone_sfh7743_regulator = reg;
+	return 0;
+}
+
+static void mapphone_sfh7743_exit(void)
+{
+	regulator_put(mapphone_sfh7743_regulator);
+}
+
+static int mapphone_sfh7743_power_on(void)
+{
+	return regulator_enable(mapphone_sfh7743_regulator);
+}
+
+static int mapphone_sfh7743_power_off(void)
+{
+	if (mapphone_sfh7743_regulator)
+		return regulator_disable(mapphone_sfh7743_regulator);
+	return 0;
+}
+
+static struct sfh7743_platform_data mapphone_sfh7743_data = {
+	.init = mapphone_sfh7743_initialization,
+	.exit = mapphone_sfh7743_exit,
+	.power_on = mapphone_sfh7743_power_on,
+	.power_off = mapphone_sfh7743_power_off,
+
+	.gpio = MAPPHONE_PROX_INT_GPIO,
+};
+
+static void __init mapphone_sfh7743_init(void)
+{
+	int proximity_gpio = MAPPHONE_PROX_INT_GPIO;
+#ifdef CONFIG_ARM_OF
+	proximity_gpio = get_gpio_by_name("proximity_int");
+	if (proximity_gpio < 0) {
+		printk(KERN_DEBUG "cannot retrieve proximity_int from device tree\n");
+		proximity_gpio = MAPPHONE_PROX_INT_GPIO;
+	}
+	mapphone_sfh7743_data.gpio = proximity_gpio;
+#endif
+	gpio_request(proximity_gpio, "sfh7743 proximity int");
+	gpio_direction_input(proximity_gpio);
+	omap_cfg_reg(Y3_34XX_GPIO180);
+}
+
+struct platform_device sfh7743_platform_device = {
+	.name = "sfh7743",
+	.id = -1,
+	.dev = {
+		.platform_data = &mapphone_sfh7743_data,
+	},
+};
+
+
 /*
  * KXTF9
  */
@@ -525,6 +667,11 @@ void __init mapphone_sensors_init(void)
 	mapphone_kxtf9_init();
 
 	mapphone_isl29030_init();
+
+	if (prox_sensor_type == PROXIMITY_SFH7743) {
+		mapphone_sfh7743_init();
+		platform_device_register(&sfh7743_platform_device);
+	}
 
 	mapphone_bu52014hfv_init();
 
