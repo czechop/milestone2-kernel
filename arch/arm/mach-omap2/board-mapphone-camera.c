@@ -72,12 +72,13 @@
 				OMAP343X_PADCONF_PUD_ENABLED | \
 				OMAP343X_PADCONF_MUXMODE4)
 
-#define CAM_MAX_REGS 5
+#define CAM_MAX_REGS 1
 #define CAM_MAX_REG_NAME_LEN 8
 #define SENSOR_POWER_OFF     0
 #define SENSOR_POWER_STANDBY 1
 
 static int  mapphone_camera_reg_power(bool);
+static void mapphone_init_reg_list(void);
 /* devtree regulator support */
 static char regulator_list[CAM_MAX_REGS][CAM_MAX_REG_NAME_LEN];
 /* devtree flash */
@@ -624,6 +625,67 @@ int mapphone_camera_reg_power(bool enable)
 
 }
 
+void mapphone_init_reg_list()
+{
+#ifdef CONFIG_ARM_OF
+	struct device_node *feat_node;
+	const void *feat_prop;
+	char *prop_name;
+	char reg_name[CAM_MAX_REG_NAME_LEN];
+	int reg_entry;
+	int feature_name_len, i, j;
+
+	j = 0;
+	reg_entry = 0;
+
+	/* clear the regulator list */
+	memset(regulator_list, 0x0, sizeof(regulator_list));
+
+	/* get regulator info for this device */
+	feat_node = of_find_node_by_path(DT_HIGH_LEVEL_FEATURE);
+	if (NULL == feat_node)
+		return;
+
+	feat_prop = of_get_property(feat_node,
+				"feature_cam_regulators", NULL);
+	if (NULL != feat_prop) {
+		prop_name = (char *)feat_prop;
+		printk(KERN_INFO \
+			"Regulators for device: %s\n", prop_name);
+		feature_name_len = strlen(prop_name);
+
+		memset(reg_name, 0x0, CAM_MAX_REG_NAME_LEN);
+
+		for (i = 0; i < feature_name_len; i++) {
+
+			if (prop_name[i] != '\0' && prop_name[i] != ',')
+				reg_name[j++] = prop_name[i];
+
+			if (prop_name[i] == ',' ||\
+				 (i == feature_name_len-1)) {
+				printk(KERN_INFO \
+					"Adding %s to camera \
+						regulator list\n",\
+					reg_name);
+				if (reg_entry < CAM_MAX_REGS) {
+					strncpy(\
+						regulator_list[reg_entry++],\
+						reg_name,\
+						CAM_MAX_REG_NAME_LEN);
+					memset(reg_name, 0x0, \
+						CAM_MAX_REG_NAME_LEN);
+					j = 0;
+				} else {
+					break;
+				}
+			}
+
+		}
+	}
+#endif
+    return;
+}
+
 void __init mapphone_camera_init(void)
 {
 #ifdef CONFIG_ARM_OF 
@@ -639,6 +701,8 @@ void __init mapphone_camera_init(void)
 		sensor_power_config = SENSOR_POWER_OFF;
 	}
 #endif /*CONFIG_ARM_OF */
+
+	mapphone_init_reg_list();
 
 	return;
 
