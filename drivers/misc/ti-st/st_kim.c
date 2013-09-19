@@ -765,17 +765,24 @@ static int kim_probe(struct platform_device *pdev)
 	pr_info("sysfs entries created\n");
 
 	kim_debugfs_dir = debugfs_create_dir("ti-st", NULL);
-	if (IS_ERR(kim_debugfs_dir)) {
+	if (!kim_debugfs_dir) {
 		pr_err(" debugfs entries creation failed \n");
 		kim_debugfs_dir = NULL;
 		return -EIO;
 	}
 
-	debugfs_create_file("version", S_IRUGO, kim_debugfs_dir,
-				kim_gdata, &version_debugfs_fops);
-	debugfs_create_file("protocols", S_IRUGO, kim_debugfs_dir,
-				kim_gdata, &list_debugfs_fops);
-	pr_info(" debugfs entries created \n");
+	if (IS_ERR(kim_debugfs_dir)) {
+		pr_info("debugfs isn't enabled...skipping\n");
+   }
+   else
+   {
+      debugfs_create_file("version", S_IRUGO, kim_debugfs_dir,
+            kim_gdata, &version_debugfs_fops);
+      debugfs_create_file("protocols", S_IRUGO, kim_debugfs_dir,
+            kim_gdata, &list_debugfs_fops);
+      pr_info(" debugfs entries created \n");
+   }
+
 	return 0;
 }
 

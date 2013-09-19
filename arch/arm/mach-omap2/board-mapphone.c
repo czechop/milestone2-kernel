@@ -1655,14 +1655,28 @@ static void __init mapphone_bt_init(void)
 }
 #else
 
+/* TODO: handle suspend/resume here.
+* Upon every suspend, make sure the wilink chip is capable enough to wake-up the
+* OMAP host.
+*/
+static int plat_wlink_kim_suspend(struct platform_device *pdev, pm_message_t state)
+{
+	return 0;
+}
+
+static int plat_wlink_kim_resume(struct platform_device *pdev)
+{
+	return 0;
+}
+
 /* wl127x BT, FM, GPS connectivity chip */
 struct ti_st_plat_data wilink_pdata = {
 	.nshutdown_gpio = MAPPHONE_BT_RESET_GPIO, 
 	.dev_name = WILINK_UART_DEV_NAME,
 	.flow_cntrl = 1,
 	.baud_rate = 3686400,
-	.suspend = 0,
-	.resume = 0,
+	.suspend = plat_wlink_kim_suspend,
+	.resume = plat_wlink_kim_resume,
 };
 static struct platform_device wl127x_device = {
 	.name           = "kim",
