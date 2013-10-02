@@ -1856,6 +1856,7 @@ finish_touch_setup:
 	ts->cal_check_flag = 0;
 	ts->cal_timer = 0;
 
+   ts_ = ts;
 	return 0;
 
 err_create_fw_version_file_failed:
