@@ -72,7 +72,312 @@ static int mapphone_touch_recovery_mode0(const char *rst_name,
 		const char *int_name, bool rst_level);
 static int mapphone_touch_recovery_mode1(void);
 static int mapphone_touch_irq_status(const char *int_name);
-static struct qtouch_ts_platform_data *qtouch_pdata;
+
+static struct vkey mapphone_touch_vkeys[] = {
+	{
+		.code		= KEY_BACK,
+		.center_x	= 32,
+		.center_y	= 906,
+		.width		= 63,
+		.height		= 57,
+	},
+	{
+		.code		= KEY_MENU,
+		.center_x	= 162,
+		.center_y	= 906,
+		.width		= 89,
+		.height		= 57,
+	},
+	{
+		.code		= KEY_HOME,
+		.center_x	= 292,
+		.center_y	= 906,
+		.width		= 89,
+		.height		= 57,
+	},
+	{
+		.code		= KEY_SEARCH,
+		.center_x	= 439,
+		.center_y	= 906,
+		.width		= 63,
+		.height		= 57,
+	},
+};
+static struct qtm_touch_keyarray_cfg mapphone_key_array_data[] = {
+	{
+		.ctrl		= 0,
+		.x_origin	= 0,
+		.y_origin	= 0,
+		.x_size		= 0,
+		.y_size		= 0,
+		.aks_cfg	= 0,
+		.burst_len	= 0,
+		.tch_det_thr	= 0,
+		.tch_det_int	= 0,
+		.rsvd1		= 0,
+		.rsvd2		= 0,
+	},
+	{
+		.ctrl		= 0,
+		.x_origin	= 0,
+		.y_origin	= 0,
+		.x_size		= 0,
+		.y_size		= 0,
+		.aks_cfg	= 0,
+		.burst_len	= 0,
+		.tch_det_thr	= 0,
+		.tch_det_int	= 0,
+		.rsvd1		= 0,
+		.rsvd2		= 0,
+	},
+};
+static struct qtouch_ts_platform_data mapphone_ts_platform_data = {
+	.flags		= (QTOUCH_SWAP_XY |
+			   QTOUCH_USE_MULTITOUCH |
+			   QTOUCH_CFG_BACKUPNV |
+			   QTOUCH_EEPROM_CHECKSUM),
+	.irqflags		= (IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW),
+	.abs_min_x		= 20,
+	.abs_max_x		= 1004,
+	.abs_min_y		= 0,
+	.abs_max_y		= 960,
+	.abs_min_p		= 0,
+	.abs_max_p		= 255,
+	.abs_min_w		= 0,
+	.abs_max_w		= 15,
+	.x_delta		= 400,
+	.y_delta		= 250,
+	.nv_checksum		= 0xb834,
+	.fuzz_x			= 0,
+	.fuzz_y			= 0,
+	.fuzz_p			= 2,
+	.fuzz_w			= 2,
+	.boot_i2c_addr		= 0x5f,
+	.hw_reset		= mapphone_touch_reset,
+	.key_array = {
+		.cfg		= mapphone_key_array_data,
+		.keys		= NULL,
+		.num_keys	= 0,
+	},
+	.power_cfg	= {
+		.idle_acq_int	= 0xff,
+		.active_acq_int	= 0xff,
+		.active_idle_to	= 0x01,
+	},
+	.acquire_cfg	= {
+		.charge_time	= 12,
+		.atouch_drift	= 5,
+		.touch_drift	= 20,
+		.drift_susp	= 20,
+		.touch_autocal	= 0x96,
+		.sync		= 0,
+		.atch_cal_suspend_time	= 0,
+		.atch_cal_suspend_thres	= 0,
+	},
+	.multi_touch_cfg	= {
+		.ctrl		= 0x0b,
+		.x_origin	= 0,
+		.y_origin	= 0,
+		.x_size		= 12,
+		.y_size		= 7,
+		.aks_cfg	= 0,
+		.burst_len	= 0x40,
+		.tch_det_thr	= 0x12,
+		.tch_det_int	= 0x2,
+		.orient		= 0x00,
+		.mrg_to		= 25,
+		.mov_hyst_init	= 5,
+		.mov_hyst_next	= 5,
+		.mov_filter	= 0,
+		.num_touch	= 4,
+		.merge_hyst	= 0,
+		.merge_thresh	= 3,
+		.amp_hyst       = 0,
+		.x_res		= 0x0000,
+		.y_res		= 0x0000,
+		.x_low_clip	= 0x00,
+		.x_high_clip	= 0x00,
+		.y_low_clip	= 0x00,
+		.y_high_clip	= 0x00,
+		.x_edge_ctrl	= 0,
+		.x_edge_dist	= 0,
+		.y_edge_ctrl	= 0,
+		.y_edge_dist	= 0,
+	},
+	.linear_tbl_cfg = {
+		.ctrl		= 0x01,
+		.x_offset	= 0x0000,
+		.x_segment = {
+			0x48, 0x3f, 0x3c, 0x3E,
+			0x3f, 0x3e, 0x3e, 0x3e,
+			0x3f, 0x42, 0x41, 0x3f,
+			0x41, 0x40, 0x41, 0x46
+		},
+		.y_offset = 0x0000,
+		.y_segment = {
+			0x44, 0x38, 0x37, 0x3e,
+			0x3e, 0x41, 0x41, 0x3f,
+			0x42, 0x41, 0x42, 0x42,
+			0x41, 0x3f, 0x41, 0x45
+		},
+	},
+	.comms_config_cfg = {
+		.ctrl		= 0,
+		.command	= 0,
+	},
+	.gpio_pwm_cfg = {
+		.ctrl			= 0,
+		.report_mask		= 0,
+		.pin_direction		= 0,
+		.internal_pullup	= 0,
+		.output_value		= 0,
+		.wake_on_change		= 0,
+		.pwm_enable		= 0,
+		.pwm_period		= 0,
+		.duty_cycle_0		= 0,
+		.duty_cycle_1		= 0,
+		.duty_cycle_2		= 0,
+		.duty_cycle_3		= 0,
+		.trigger_0		= 0,
+		.trigger_1		= 0,
+		.trigger_2		= 0,
+		.trigger_3		= 0,
+	},
+	.grip_suppression_cfg = {
+		.ctrl		= 0x00,
+		.xlogrip	= 0x00,
+		.xhigrip	= 0x00,
+		.ylogrip	= 0x00,
+		.yhigrip	= 0x00,
+		.maxtchs	= 0x00,
+		.reserve0	= 0x00,
+		.szthr1		= 0x00,
+		.szthr2		= 0x00,
+		.shpthr1	= 0x00,
+		.shpthr2	= 0x00,
+		.supextto	= 0x00,
+	},
+	.noise_suppression_cfg = {
+		.ctrl			= 0,
+		.outlier_filter_len	= 0,
+		.reserve0		= 0,
+		.gcaf_upper_limit	= 0,
+		.gcaf_lower_limit	= 0,
+		.gcaf_low_count		= 0,
+		.noise_threshold	= 0,
+		.reserve1		= 0,
+		.freq_hop_scale		= 0,
+		.burst_freq_0		= 0,
+		.burst_freq_1		= 0,
+		.burst_freq_2		= 0,
+		.burst_freq_3		= 0,
+		.burst_freq_4		= 0,
+		.idle_gcaf_valid	= 0,
+	},
+	.touch_proximity_cfg = {
+		.ctrl			= 0,
+		.x_origin		= 0,
+		.y_origin		= 0,
+		.x_size			= 0,
+		.y_size			= 0,
+		.reserve0		= 0,
+		.blen			= 0,
+		.tch_thresh		= 0,
+		.tch_detect_int		= 0,
+		.average		= 0,
+		.rate			= 0,
+	},
+	.one_touch_gesture_proc_cfg = {
+		.ctrl			= 0,
+		.reserve0		= 0,
+		.gesture_enable		= 0,
+		.pres_proc		= 0,
+		.tap_time_out		= 0,
+		.flick_time_out		= 0,
+		.drag_time_out		= 0,
+		.short_press_time_out	= 0,
+		.long_press_time_out	= 0,
+		.repeat_press_time_out	= 0,
+		.flick_threshold	= 0,
+		.drag_threshold		= 0,
+		.tap_threshold		= 0,
+		.throw_threshold	= 0,
+	},
+	.self_test_cfg = {
+		.ctrl			= 0,
+		.command		= 0,
+		.high_signal_limit_0	= 0,
+		.low_signal_limit_0	= 0,
+		.high_signal_limit_1	= 0,
+		.low_signal_limit_1	= 0,
+		.high_signal_limit_2	= 0,
+		.low_signal_limit_2	= 0,
+	},
+	.two_touch_gesture_proc_cfg = {
+		.ctrl			= 0,
+		.reserved0		= 0,
+		.reserved1		= 0,
+		.gesture_enable		= 0,
+		.rotate_threshold	= 0,
+		.zoom_threshold		= 0,
+	},
+	.cte_config_cfg = {
+		.ctrl			= 1,
+		.command		= 0,
+		.mode			= 3,
+		.idle_gcaf_depth	= 4,
+		.active_gcaf_depth	= 8,
+		.voltage		= 0,
+	},
+	.noise1_suppression_cfg = {
+		.ctrl		= 0x01,
+		.version	= 0x01,
+		.atch_thr	= 0x64,
+		.duty_cycle	= 0x08,
+		.drift_thr	= 0x00,
+		.clamp_thr	= 0x00,
+		.diff_thr	= 0x00,
+		.adjustment	= 0x00,
+		.average	= 0x0000,
+		.temp		= 0x00,
+		.offset = {
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+		},
+		.bad_chan = {
+			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+			0x00, 0x00, 0x00
+		},
+		.x_short	= 0x00,
+	},
+	.vkeys			= {
+		.count		= ARRAY_SIZE(mapphone_touch_vkeys),
+		.keys		= mapphone_touch_vkeys,
+	},
+};
+static struct qtouch_ts_platform_data *qtouch_pdata = &mapphone_ts_platform_data;
+
+
+
 static void __init mapphone_legacy_qtouch_init(struct i2c_board_info *i2c_info);
 static void __init mapphone_legacy_qtouch_gpio_init(
 		struct i2c_board_info *i2c_info);
@@ -951,14 +1256,13 @@ static void __init mapphone_legacy_qtouch_init(struct i2c_board_info *i2c_info)
 		goto mapphone_legacy_qtouch_init_ret;
 	}
 
-	qtouch_pdata = kzalloc(sizeof(struct qtouch_ts_platform_data), GFP_KERNEL);
 	if (qtouch_pdata == NULL) {
 		printk(KERN_ERR "%s: Unable to create platform data.\n",
 			__func__);
 		goto mapphone_legacy_qtouch_init_err;
 	}
 	/* init fields with common configurations for all products */
-	qtouch_pdata->flags = QTOUCH_USE_MULTITOUCH |
+	qtouch_pdata->flags = QTOUCH_SWAP_XY | QTOUCH_USE_MULTITOUCH |
 			   QTOUCH_CFG_BACKUPNV |
 			   QTOUCH_EEPROM_CHECKSUM;
 	qtouch_pdata->irqflags = IRQF_TRIGGER_FALLING | IRQF_TRIGGER_LOW;

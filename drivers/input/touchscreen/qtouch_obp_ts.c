@@ -17,6 +17,7 @@
  * Derived from the Motorola OBP touch driver.
  *
  */
+
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/earlysuspend.h>
@@ -889,14 +890,14 @@ static int qtouch_do_cmd_proc_msg(struct qtouch_ts_data *ts,
 		} else {
 			pr_info("%s:EEPROM checksum matches\n", __func__);
 		}
-		if (ts->family_id != QTM_OBP_TABLET_FAMILY_ID)
-			qtouch_calibrate_chip(ts);
+		//if (ts->family_id != QTM_OBP_TABLET_FAMILY_ID)
+		//	qtouch_calibrate_chip(ts);
 		pr_info("%s: Reset done.\n", __func__);
 	}
 
 	if (msg->status & QTM_CMD_PROC_STATUS_CAL) {
 		if (ts->family_id != QTM_OBP_TABLET_FAMILY_ID) {
-			ts->cal_check_flag = 1;
+			ts->cal_check_flag = 0;
 			ts->cal_timer = 0;
 		}
 		pr_info("%s: Self-calibration started.\n", __func__);
@@ -2151,6 +2152,27 @@ static int qtouch_ts_probe(struct i2c_client *client,
 	msleep(QTM_OBP_SLEEP_WAIT_FOR_HW_RESET_TABLET -
 		QTM_OBP_SLEEP_WAIT_FOR_HW_RESET);
 	err = qtouch_process_info_block(ts);
+	if ((err == 0) && (ts->family_id == 0x31)) {
+		pr_info("%s: Need to verify FW checksum\n", __func__);
+
+      qtouch_force_reset(ts, 2);
+      msleep(QTM_OBP_SLEEP_WAIT_FOR_RESET);
+      ts->org_i2c_addr = ts->client->addr;
+      ts->client->addr = ts->pdata->boot_i2c_addr;
+      err = qtouch_set_boot_mode(ts);
+      if (err < 0)
+         pr_err("%s: Failed unlocking IC in boot mode %i\n",
+                __func__, err);
+      if (qtouch_tsdebug) {
+         qtouch_read(ts, &boot_info, 1);
+         pr_info("%s:Data read 0x%x\n", __func__, boot_info);
+      }
+      ts->client->addr = ts->org_i2c_addr;
+      qtouch_force_reset(ts, 0);
+      msleep(QTM_OBP_SLEEP_WAIT_FOR_CKSUM);
+
+		err = qtouch_process_info_block(ts);
+	}
 	if (err == 0) {
 		pr_info("%s: FW version is 0x%X Build 0x%X\n", __func__,
 					   ts->fw_version, ts->build_version);
