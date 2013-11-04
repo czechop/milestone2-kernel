@@ -92,6 +92,24 @@ static int __init omap_hdq_init(void)
 	return platform_device_register(&omap_hdq_dev);
 }
 
+static struct cpuidle_params mapphone_cpuidle_params_table[] = {
+        /* C1 */
+        {74 + 78, 152, 1},
+        /* C2 */
+        {165 + 90, 255, 0},
+        /* C3 */
+        {163 + 180, 345, 1},
+        /* C4 */
+        {2852 + 605, 3457, 0},
+        /* C5 */
+        {800 + 366, 2120, 1},
+        /* C6 */
+        {4080 + 801, 4881, 0},
+        /* C7 */
+        {4300 + 8794, 159000, 1},
+};
+
+
 static struct omap_musb_board_data musb_board_data = {
 	.interface_type         = MUSB_INTERFACE_ULPI,
 #ifdef CONFIG_USB_MUSB_OTG
@@ -111,7 +129,7 @@ static int plat_uart_disable(void)
 	int port_id = 0;
 	int err = 0;
 	if (uart_req) {
-		sscanf(WILINK_UART_DEV_NAME, "/dev/ttyS%d", &port_id);
+		sscanf(WILINK_UART_DEV_NAME, "/dev/ttyO%d", &port_id);
 		err = omap_serial_ext_uart_disable(port_id);
 		if (!err)
 			uart_req = false;
@@ -126,7 +144,7 @@ static int plat_uart_enable(void)
 	int port_id = 0;
 	int err = 0;
 	if (!uart_req) {
-		sscanf(WILINK_UART_DEV_NAME, "/dev/ttyS%d", &port_id);
+		sscanf(WILINK_UART_DEV_NAME, "/dev/ttyO%d", &port_id);
 		err = omap_serial_ext_uart_enable(port_id);
 		if (!err)
 			uart_req = true;
@@ -363,7 +381,7 @@ static void __init omap_mapphone_init(void)
 	 * should be set in the board file. Before regulators are registered.
 	 */
 	regulator_has_full_constraints();
-
+	omap3_pm_init_cpuidle(mapphone_cpuidle_params_table);
 	omap_serial_init();
 	mapphone_bp_model_init();
 	mapphone_voltage_init();
