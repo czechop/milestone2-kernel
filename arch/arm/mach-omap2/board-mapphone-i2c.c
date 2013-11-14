@@ -21,6 +21,7 @@
 #include <linux/isl29030.h>
 #include <linux/bu52014hfv.h>
 #include <linux/vib-gpio.h>
+#include <linux/lis331dlh.h>
 
 #define MAPPHONE_LM_3530_INT_GPIO	92
 #define MAPPHONE_AKM8973_INT_GPIO	175
@@ -37,6 +38,58 @@ static struct i2c_board_info __initdata
 	mapphone_i2c_bus2_board_info[I2C_BUS_MAX_DEVICES];
 static struct i2c_board_info __initdata
 	mapphone_i2c_bus3_board_info[I2C_BUS_MAX_DEVICES];
+
+/*
+ * LIS331DLH
+ */
+
+static struct regulator *mapphone_lis331dlh_regulator;
+static int mapphone_lis331dlh_initialization(void)
+{
+	struct regulator *reg;
+	reg = regulator_get(NULL, "vhvio");
+	if (IS_ERR(reg))
+		return PTR_ERR(reg);
+	mapphone_lis331dlh_regulator = reg;
+	return 0;
+}
+
+static void mapphone_lis331dlh_exit(void)
+{
+	regulator_put(mapphone_lis331dlh_regulator);
+}
+
+static int mapphone_lis331dlh_power_on(void)
+{
+	return regulator_enable(mapphone_lis331dlh_regulator);
+}
+
+static int mapphone_lis331dlh_power_off(void)
+{
+	if (mapphone_lis331dlh_regulator)
+		return regulator_disable(mapphone_lis331dlh_regulator);
+	return 0;
+}
+
+struct lis331dlh_platform_data mapphone_lis331dlh_data = {
+	.init = mapphone_lis331dlh_initialization,
+	.exit = mapphone_lis331dlh_exit,
+	.power_on = mapphone_lis331dlh_power_on,
+	.power_off = mapphone_lis331dlh_power_off,
+
+	.min_interval   = 1,
+	.poll_interval  = 200,
+
+	.g_range        = LIS331DLH_G_8G,
+
+	.axis_map_x     = 0,
+	.axis_map_y     = 1,
+	.axis_map_z     = 2,
+
+	.negate_x       = 0,
+	.negate_y       = 0,
+	.negate_z       = 0,
+};
 
 /*
  * LM3530
@@ -866,6 +919,12 @@ static struct i2c_board_info __initdata
 		I2C_BOARD_INFO("akm8973", 0x1C),
 		.irq = OMAP_GPIO_IRQ(MAPPHONE_AKM8973_INT_GPIO),
 	},
+#ifdef CONFIG_SENSORS_LIS331DLH
+	{
+		I2C_BOARD_INFO("lis331dlh", 0x19),
+		.platform_data = &mapphone_lis331dlh_data,
+	},
+#endif
 	{
 		I2C_BOARD_INFO("kxtf9", 0x0F),
 		.platform_data = &mapphone_kxtf9_data,

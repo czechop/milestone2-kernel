@@ -10,6 +10,14 @@ config SENSORS_LIS3LV02D
 	select INPUT_POLLDEV
 	default n
 
+config SENSORS_LIS331DLH
+	tristate "LIS331DLH Accelerometer"
+	default n
+	depends on I2C
+	help
+	 Say yes here if you wish to include the STI Micro
+	 LIS331DLH accelerometer driver.
+
 menuconfig MISC_DEVICES
 	bool "Misc devices"
 	---help---
