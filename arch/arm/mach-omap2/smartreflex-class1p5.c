@@ -273,33 +273,33 @@ done_calib:
 	sr_disable(voltdm);
 
 	/* Add margin if needed */
-	if (volt_data->volt_margin) {
-		struct omap_voltdm_pmic *pmic = voltdm->pmic;
-		/* Convert to rounded to PMIC step level if available */
-		if (pmic && pmic->vsel_to_uv && pmic->uv_to_vsel) {
-			/*
-			 * To ensure conversion works:
-			 * use a proper base voltage - we use the current volt
-			 * then convert it with pmic routine to vsel and back
-			 * to voltage, and finally remove the base voltage
-			 */
-			u_volt_margin = u_volt_current + volt_data->volt_margin;
-			u_volt_margin = pmic->uv_to_vsel(u_volt_margin);
-			u_volt_margin = pmic->vsel_to_uv(u_volt_margin);
-			u_volt_margin -= u_volt_current;
-		} else {
-			if (u_volt_margin & SR1P5_MARGIN_DISABLE_SR) {
-				/* XXX This should be impossible! */
-				pr_err("%s: SR calibration ran for %s OPP with vnom %d"
-					"for which SR was disabled??!\n", __func__,
-					voltdm->name, volt_data->volt_nominal);
-			} else {
-				u_volt_safe += u_volt_margin;
-			}
-		}
+        if (volt_data->volt_margin) {
+                struct omap_voltdm_pmic *pmic = voltdm->pmic;
+                /* Convert to rounded to PMIC step level if available */
+                if (pmic && pmic->vsel_to_uv && pmic->uv_to_vsel) {
+                        /*
+                         * To ensure conversion works:
+                         * use a proper base voltage - we use the current volt
+                         * then convert it with pmic routine to vsel and back
+                         * to voltage, and finally remove the base voltage
+                         */
+                        u_volt_margin = u_volt_current + volt_data->volt_margin;
+                        u_volt_margin = pmic->uv_to_vsel(u_volt_margin);
+                        u_volt_margin = pmic->vsel_to_uv(u_volt_margin);
+                        u_volt_margin -= u_volt_current;
+                } else {
+                        u_volt_margin = volt_data->volt_margin;
+                }
 
-		u_volt_safe += u_volt_margin;
-	}
+                if (u_volt_margin & SR1P5_MARGIN_DISABLE_SR) {
+                        /* XXX This should be impossible! */
+                        pr_err("%s: SR calibration ran for %s OPP with vnom %d"
+                                "for which SR was disabled??!\n", __func__,
+                                voltdm->name, volt_data->volt_nominal);
+                } else {
+                        u_volt_safe += u_volt_margin;
+                }
+        }
 
 	if (u_volt_safe > volt_data->volt_nominal) {
 		pr_warning("%s: %s Vsafe %ld > Vnom %d. %ld[%d] margin on"
