@@ -187,6 +187,10 @@ static void omap_set_vbus(struct musb *musb, int is_on)
 		otg_state_string(musb),
 		musb_readb(musb->mregs, MUSB_DEVCTL));
 }
+static int omap_set_power(struct otg_transceiver *x, unsigned mA)
+{
+	return 0;
+}
 
 static int musb_platform_resume(struct musb *musb);
 
@@ -197,6 +201,24 @@ int musb_platform_set_mode(struct musb *musb, u8 musb_mode)
 	devctl |= MUSB_DEVCTL_SESSION;
 	musb_writeb(musb->mregs, MUSB_DEVCTL, devctl);
 
+	switch (musb_mode) {
+#ifdef CONFIG_USB_MUSB_HDRC_HCD
+	case MUSB_HOST:
+		otg_set_host(musb->xceiv, musb->xceiv->host);
+		break;
+#endif
+#ifdef CONFIG_USB_GADGET_MUSB_HDRC
+	case MUSB_PERIPHERAL:
+		otg_set_peripheral(musb->xceiv, musb->xceiv->gadget);
+		break;
+#endif
+#ifdef CONFIG_USB_MUSB_OTG
+	case MUSB_OTG:
+		break;
+#endif
+	default:
+		return -EINVAL;
+	}
 	return 0;
 }
 
@@ -237,7 +259,6 @@ int __init musb_platform_init(struct musb *musb)
 	l &= ~SMARTSTDBY;	/* disable smart standby */
 	l &= ~AUTOIDLE;		/* disable auto idle */
 	l &= ~NOIDLE;		/* remove possible noidle */
-	l &= ~SMARTIDLE;	/* disable smart idle */
 	/*
 	 * MUSB AUTOIDLE and SMARTIDLE don't work in 3430.
 	 * Workaround by Richard Woodruff/TI
@@ -262,6 +283,8 @@ int __init musb_platform_init(struct musb *musb)
 
 	if (is_host_enabled(musb))
 		musb->board_set_vbus = omap_set_vbus;
+	if (!musb->xceiv->set_power && is_peripheral_enabled(musb))
+		musb->xceiv->set_power = omap_set_power;
 
 	setup_timer(&musb_idle_timer, musb_do_idle, (unsigned long) musb);
 
@@ -284,7 +307,8 @@ int musb_platform_suspend(struct musb *musb)
 	l |= ENABLEWAKEUP;	/* enable wakeup */
 	omap_writel(l, OTG_SYSCONFIG);
 
-	otg_set_suspend(musb->xceiv, 1);
+	if (musb->xceiv->set_suspend)
+		musb->xceiv->set_suspend(musb->xceiv, 1);
 
 	if (musb->set_clock)
 		musb->set_clock(musb->clock, 0);
@@ -301,7 +325,8 @@ static int musb_platform_resume(struct musb *musb)
 	if (!musb->clock)
 		return 0;
 
-	otg_set_suspend(musb->xceiv, 0);
+	if (musb->xceiv->set_suspend)
+		musb->xceiv->set_suspend(musb->xceiv, 0);
 
 	if (musb->set_clock)
 		musb->set_clock(musb->clock, 1);
@@ -311,8 +336,11 @@ static int musb_platform_resume(struct musb *musb)
 	l = omap_readl(OTG_SYSCONFIG);
 	l &= ~ENABLEWAKEUP;	/* disable wakeup */
 	omap_writel(l, OTG_SYSCONFIG);
-
-
+#if 0
+	l = omap_readl(OTG_FORCESTDBY);
+	l &= ~ENABLEFORCE;	/* disable MSTANDBY */
+	omap_writel(l, OTG_FORCESTDBY);
+#endif
 	return 0;
 }
 

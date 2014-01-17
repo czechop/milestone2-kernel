@@ -47,7 +47,7 @@
 #endif
 #ifdef CONFIG_VIDEO_CAM_ISE
 #include <media/camise.h>
-#define CAMISE_XCLK_24MHZ			24000000
+#define CAMISE_XCLK_24MHZ		24000000
 #endif
 
 #ifdef CONFIG_VIDEO_OMAP3_HPLENS
@@ -55,22 +55,6 @@
 #endif
 #endif
 
-#define CAM_IOMUX_SAFE_MODE (OMAP343X_PADCONF_PULL_UP | \
-				OMAP343X_PADCONF_PUD_ENABLED | \
-				OMAP343X_PADCONF_MUXMODE7)
-#define CAM_IOMUX_SAFE_MODE_INPUT (OMAP343X_PADCONF_INPUT_ENABLED | \
-				OMAP343X_PADCONF_PULL_UP | \
-				OMAP343X_PADCONF_PUD_ENABLED | \
-				OMAP343X_PADCONF_MUXMODE7)
-#define CAM_IOMUX_FUNC_MODE (OMAP343X_PADCONF_INPUT_ENABLED | \
-				OMAP343X_PADCONF_MUXMODE0)
-#define CAM_IOMUX_SAFE_MODE_DOWN (OMAP343X_PADCONF_PULL_DOWN | \
-				OMAP343X_PADCONF_PUD_ENABLED | \
-				OMAP343X_PADCONF_MUXMODE7)
-
-#define CAM_IOMUX_FUNC_MODE4 (OMAP343X_PADCONF_PULL_UP | \
-				OMAP343X_PADCONF_PUD_ENABLED | \
-				OMAP343X_PADCONF_MUXMODE4)
 
 #define CAM_MAX_REGS 1
 #define CAM_MAX_REG_NAME_LEN 8
@@ -83,12 +67,9 @@ static void mapphone_init_reg_list(void);
 static char regulator_list[CAM_MAX_REGS][CAM_MAX_REG_NAME_LEN];
 /* devtree flash */
 static enum v4l2_power previous_power = V4L2_POWER_OFF;
-static int avdd_en_gpio     = -1;
 static int cam_reset_gpio   = -1;
 static int cam_standby_gpio = -1;
-static int sensor_power_config = SENSOR_POWER_STANDBY;
 static u8 cam_flags;
-static unsigned int is_smart_cam;
 
 static void mapphone_lock_cpufreq(int lock)
 {
@@ -197,8 +178,7 @@ static int mt9p012_sensor_power_set(struct device* dev, enum v4l2_power power)
 		/* Turn off power */
 		error = mapphone_camera_reg_power(false);
 		if (error != 0) {
-			pr_err("%s: Failed to power off regulators\n",
-				__func__);
+			pr_err("%s: Failed to power off regulators\n", __func__);
 		}
 
 		/* Release pm constraints */
@@ -228,11 +208,11 @@ static int mt9p012_sensor_power_set(struct device* dev, enum v4l2_power power)
 			/* Configure ISP */
 			isp_configure_interface(&mt9p012_if_config);
 
+
 			/* turn on digital power */
 			error = mapphone_camera_reg_power(true);
 			if (error != 0) {
-				pr_err("%s: Failed to power on regulators\n",
-					__func__);
+				pr_err("%s: Failed to power on regulators\n", __func__);
 				goto out;
 			}
 			msleep(5);
@@ -275,7 +255,6 @@ static int mt9p012_sensor_power_set(struct device* dev, enum v4l2_power power)
 			msleep(3);
 		}
 		break;
-
 failed_cam_standby_gpio:
 		if (cam_standby_gpio >= 0) {
 			gpio_free(cam_standby_gpio);
@@ -291,13 +270,14 @@ out:
 		omap_pm_set_min_bus_tput(dev, OCP_INITIATOR_AGENT, 0);
 		omap_pm_set_max_mpu_wakeup_lat(dev, -1);
 		return error;
-	case V4L2_POWER_STANDBY:
-		/* Stand By Sequence */
-		mt9p012_set_xclk(0);
-		break;
-	}
-	/* Save powerstate to know what was before calling POWER_ON. */
-	previous_power = power;
+        case V4L2_POWER_STANDBY:
+                /* Stand By Sequence */
+                mt9p012_set_xclk(0);
+                break;
+        }
+        /* Save powerstate to know what was before calling POWER_ON. */
+        previous_power = power;
+
 	return 0;
 }
 
@@ -328,40 +308,26 @@ struct camise_capture_size {
 	unsigned long width;
 	unsigned long height;
 };
-#ifndef CONFIG_KOBE_BOARD
-const static struct camise_capture_size camise_sizes_1[] = {
+
+const static struct camise_capture_size defy_camise_sizes_1[] = {
 	{  176, 144 }, /* QCIF for Video Recording */
 	{  320, 240 }, /* QVGA for Preview and Video Recording */
 	{  352, 288 }, /* CIF for Video Recording */
 	{  480, 360 }, /* Bigger Viewfinder */
 	{  640, 480 }, /* 4X BINNING */
 	{  512, 1024},
-	/*{  512, 2048},*/ /* Jpeg Capture Resolution */
 	{  640, 2048}, /* JPEG Catpure Resolution */
 	{  848, 480 }, /* Support for WVGA preview */
 };
-#else
-const static struct camise_capture_size camise_sizes_1[] = {
-/*	{  160, 120 }, */
+
+const static struct camise_capture_size kobe_camise_sizes_1[] = {
 	{  176, 144 }, /* QCIF for Video Recording */
 	{  320, 240 }, /* QVGA for Preview and Video Recording */
 	{  352, 288 }, /* CIF for Video Recording */
 	{  480, 360 }, /* Bigger Viewfinder */
 	{  512, 1024}, /* Jpeg Capture Resolution */
 	{  640, 480 },	 /* 4X BINNING */
-/*	{ 1280, 960 },*/ /* 2X BINNING */
-	{ 768, 1024},	 /* JPEG Catpure Resolution */
-/*	{ 2048, 1536},	/ * 3 MP */
-};
-#endif
-const static struct camise_capture_size camise_sizes_2[] = {
-	{  176, 144 }, /* QCIF for Video Recording */
-	{  320, 240 }, /* QVGA for Preview and Video Recording */
-	{  352, 288 }, /* CIF for Video Recording */
-	{  480, 360 }, /* Bigger Viewfinder */
-	{  640, 480 }, /* 4X BINNING */
-	{  512, 1024},
-	{  768, 1024}, /* JPEG Catpure Resolution */
+	{  768, 1024},	 /* JPEG Catpure Resolution */
 };
 
 static struct omap34xxcam_sensor_config camise_cam_hwc = {
@@ -391,20 +357,40 @@ static struct isp_interface_config camise_if_config = {
 	.u.par.par_clk_pol = 0x0,
 };
 
-static int camise_get_capture_size(int index,
-				unsigned long *w,
-				unsigned long *h)
+static int camise_get_capture_size(int index, unsigned long *w,	unsigned long *h)
 {
-	int max_size = is_smart_cam ? ARRAY_SIZE(camise_sizes_2) :
-			ARRAY_SIZE(camise_sizes_1);
+	struct device_node *node;
+	const void *prop;
+	int max_size = 0;
 
-	if (is_smart_cam && index < max_size) {
-		*h = camise_sizes_2[index].height;
-		*w = camise_sizes_2[index].width;
-	} else if (index < max_size) {
-		*h = camise_sizes_1[index].height;
-		*w = camise_sizes_1[index].width;
+	node = of_find_node_by_path(DT_PATH_CHOSEN);
+	if (node == NULL) {
+		pr_err("Unable to read node %s from device tree!\n",
+			DT_PATH_CHOSEN);
+		return max_size;
 	}
+
+	prop = of_get_property(node, DT_PROP_CHOSEN_USB_PROD_NAME, NULL);
+	if (prop) {
+		if (!strcmp(prop, "MB526")) {
+			max_size =  ARRAY_SIZE(defy_camise_sizes_1);
+			if (index < max_size) {
+				*h = defy_camise_sizes_1[index].height;
+				*w = defy_camise_sizes_1[index].width;
+			}
+		} else if (!strcmp(prop, "MB520")) {
+			max_size =  ARRAY_SIZE(kobe_camise_sizes_1);
+			if (index < max_size) {
+				*h = kobe_camise_sizes_1[index].height;
+				*w = kobe_camise_sizes_1[index].width;
+			}
+		}
+	} else {
+		pr_err("Read property %s error!\n",
+		       DT_PROP_CHOSEN_USB_PROD_NAME);
+	}
+
+	of_node_put(node);
 
 	return max_size;
 }
@@ -451,12 +437,6 @@ static int camise_sensor_power_set(struct device *dev, enum v4l2_power power)
 			/* turn off ISP clock */
 			isp_set_xclk(0, OMAP34XXCAM_XCLK_A);
 			msleep(1);
-
-			error = mapphone_camera_reg_power(false);
-			if (error != 0) {
-				pr_err("%s: Failed to power off regulators\n",
-				__func__);
-			}
 		}
 		break;
 
@@ -497,15 +477,6 @@ static int camise_sensor_power_set(struct device *dev, enum v4l2_power power)
 			camise_if_configure();
 			msleep(10);
 
-			/* Turn on power */
-			error = mapphone_camera_reg_power(true);
-			if (error != 0) {
-				pr_err("%s: Failed to power on regulators\n",
-					__func__);
-				goto out;
-			}
-			msleep(15);
-
 			if (cam_standby_gpio >= 0) {
 				/* Bring camera out of standby */
 				gpio_set_value(cam_standby_gpio, 0);
@@ -529,9 +500,7 @@ static int camise_sensor_power_set(struct device *dev, enum v4l2_power power)
 	}
 
 	previous_power = power;
-	return 0;
-out:
-	isp_set_xclk(0, OMAP34XXCAM_XCLK_A);
+	return 0;;
 failed_cam_standby_gpio:
 	if (cam_standby_gpio >= 0) {
 		gpio_free(cam_standby_gpio);
@@ -688,26 +657,7 @@ void mapphone_init_reg_list()
 
 void __init mapphone_camera_init(void)
 {
-#ifdef CONFIG_ARM_OF 
-	avdd_en_gpio = get_gpio_by_name("cam_avdd_en");
-	if (avdd_en_gpio >= 0) {
-		printk(KERN_INFO "cam_avdd_en %d\n", avdd_en_gpio);
-		if (gpio_request(avdd_en_gpio, "camera vadd en") != 0) {
-			printk(KERN_ERR "Failed vadd en\n");
-			goto failed_avdd_en_gpio;
-		}
-		gpio_direction_output(avdd_en_gpio, 0);
-
-		sensor_power_config = SENSOR_POWER_OFF;
-	}
-#endif /*CONFIG_ARM_OF */
-
 	mapphone_init_reg_list();
 
 	return;
-
-failed_avdd_en_gpio:
-	if (avdd_en_gpio >= 0)
-		gpio_free(avdd_en_gpio);
-
 }
