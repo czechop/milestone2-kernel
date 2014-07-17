@@ -742,7 +742,8 @@ ipmr_cache_unresolved(struct net *net, vifi_t vifi, struct sk_buff *skb)
 		c->next = mfc_unres_queue;
 		mfc_unres_queue = c;
 
-		mod_timer(&ipmr_expire_timer, c->mfc_un.unres.expires);
+		if (atomic_read(&net->ipv4.cache_resolve_queue_len) == 1)
+			mod_timer(&ipmr_expire_timer, c->mfc_un.unres.expires);
 	}
 
 	/*
@@ -790,6 +791,9 @@ static int ipmr_mfc_add(struct net *net, struct mfcctl *mfc, int mrtsock)
 {
 	int line;
 	struct mfc_cache *uc, *c, **cp;
+
+	if (mfc->mfcc_parent >= MAXVIFS)
+		return -ENFILE;
 
 	line = MFC_HASH(mfc->mfcc_mcastgrp.s_addr, mfc->mfcc_origin.s_addr);
 

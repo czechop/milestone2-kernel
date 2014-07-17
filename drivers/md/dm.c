@@ -275,6 +275,7 @@ static int (*_inits[])(void) __initdata = {
 	dm_target_init,
 	dm_linear_init,
 	dm_stripe_init,
+	dm_io_init,
 	dm_kcopyd_init,
 	dm_interface_init,
 };
@@ -284,6 +285,7 @@ static void (*_exits[])(void) = {
 	dm_target_exit,
 	dm_linear_exit,
 	dm_stripe_exit,
+	dm_io_exit,
 	dm_kcopyd_exit,
 	dm_interface_exit,
 };
@@ -430,9 +432,10 @@ static void free_tio(struct mapped_device *md, struct dm_target_io *tio)
 	mempool_free(tio, md->tio_pool);
 }
 
-static struct dm_rq_target_io *alloc_rq_tio(struct mapped_device *md)
+static struct dm_rq_target_io *alloc_rq_tio(struct mapped_device *md,
+					    gfp_t gfp_mask)
 {
-	return mempool_alloc(md->tio_pool, GFP_ATOMIC);
+	return mempool_alloc(md->tio_pool, gfp_mask);
 }
 
 static void free_rq_tio(struct dm_rq_target_io *tio)
@@ -448,6 +451,12 @@ static struct dm_rq_clone_bio_info *alloc_bio_info(struct mapped_device *md)
 static void free_bio_info(struct dm_rq_clone_bio_info *info)
 {
 	mempool_free(info, info->tio->md->io_pool);
+}
+
+static int md_in_flight(struct mapped_device *md)
+{
+	return atomic_read(&md->pending[READ]) +
+	       atomic_read(&md->pending[WRITE]);
 }
 
 static void start_io_acct(struct dm_io *io)
@@ -1463,7 +1472,7 @@ static int dm_prep_fn(struct request_queue *q, struct request *rq)
 		return BLKPREP_KILL;
 	}
 
-	tio = alloc_rq_tio(md); /* Only one for each original request */
+	tio = alloc_rq_tio(md, GFP_ATOMIC);
 	if (!tio)
 		/* -ENOMEM */
 		return BLKPREP_DEFER;
@@ -1487,11 +1496,10 @@ static int dm_prep_fn(struct request_queue *q, struct request *rq)
 	return BLKPREP_OK;
 }
 
-static void map_request(struct dm_target *ti, struct request *rq,
+static void map_request(struct dm_target *ti, struct request *clone,
 			struct mapped_device *md)
 {
 	int r;
-	struct request *clone = rq->special;
 	struct dm_rq_target_io *tio = clone->end_io_data;
 
 	/*
@@ -1568,7 +1576,7 @@ static void dm_request_fn(struct request_queue *q)
 
 		blk_start_request(rq);
 		spin_unlock(q->queue_lock);
-		map_request(ti, rq, md);
+		map_request(ti, rq->special, md);
 		spin_lock_irq(q->queue_lock);
 	}
 
@@ -2098,8 +2106,7 @@ static int dm_wait_for_completion(struct mapped_device *md, int interruptible)
 				break;
 			}
 			spin_unlock_irqrestore(q->queue_lock, flags);
-		} else if (!atomic_read(&md->pending[0]) &&
-					!atomic_read(&md->pending[1]))
+		} else if (!md_in_flight(md))
 			break;
 
 		if (interruptible == TASK_INTERRUPTIBLE &&

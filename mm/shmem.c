@@ -42,6 +42,7 @@ static struct vfsmount *shm_mnt;
 
 #include <linux/xattr.h>
 #include <linux/exportfs.h>
+#include <linux/posix_acl.h>
 #include <linux/generic_acl.h>
 #include <linux/mman.h>
 #include <linux/string.h>
@@ -433,8 +434,6 @@ static swp_entry_t *shmem_swp_alloc(struct shmem_inode_info *info, unsigned long
 
 		spin_unlock(&info->lock);
 		page = shmem_dir_alloc(mapping_gfp_mask(inode->i_mapping));
-		if (page)
-			set_page_private(page, 0);
 		spin_lock(&info->lock);
 
 		if (!page) {
@@ -810,7 +809,7 @@ static int shmem_notify_change(struct dentry *dentry, struct iattr *attr)
 		error = inode_setattr(inode, attr);
 #ifdef CONFIG_TMPFS_POSIX_ACL
 	if (!error && (attr->ia_valid & ATTR_MODE))
-		error = generic_acl_chmod(inode, &shmem_acl_ops);
+		error = generic_acl_chmod(inode);
 #endif
 	if (page)
 		page_cache_release(page);
@@ -1221,6 +1220,7 @@ static int shmem_getpage(struct inode *inode, unsigned long idx,
 	struct shmem_sb_info *sbinfo;
 	struct page *filepage = *pagep;
 	struct page *swappage;
+	struct page *prealloc_page = NULL;
 	swp_entry_t *entry;
 	swp_entry_t swap;
 	gfp_t gfp;
@@ -1245,7 +1245,6 @@ repeat:
 		filepage = find_lock_page(mapping, idx);
 	if (filepage && PageUptodate(filepage))
 		goto done;
-	error = 0;
 	gfp = mapping_gfp_mask(mapping);
 	if (!filepage) {
 		/*
@@ -1256,7 +1255,19 @@ repeat:
 		if (error)
 			goto failed;
 		radix_tree_preload_end();
+		if (sgp != SGP_READ && !prealloc_page) {
+			/* We don't care if this fails */
+			prealloc_page = shmem_alloc_page(gfp, info, idx);
+			if (prealloc_page) {
+				if (mem_cgroup_cache_charge(prealloc_page,
+						current->mm, GFP_KERNEL)) {
+					page_cache_release(prealloc_page);
+					prealloc_page = NULL;
+				}
+			}
+		}
 	}
+	error = 0;
 
 	spin_lock(&info->lock);
 	shmem_recalc_inode(inode);
@@ -1405,28 +1416,38 @@ repeat:
 		if (!filepage) {
 			int ret;
 
-			spin_unlock(&info->lock);
-			filepage = shmem_alloc_page(gfp, info, idx);
-			if (!filepage) {
-				shmem_unacct_blocks(info->flags, 1);
-				shmem_free_blocks(inode, 1);
-				error = -ENOMEM;
-				goto failed;
-			}
-			SetPageSwapBacked(filepage);
+			if (!prealloc_page) {
+				spin_unlock(&info->lock);
+				filepage = shmem_alloc_page(gfp, info, idx);
+				if (!filepage) {
+					shmem_unacct_blocks(info->flags, 1);
+					shmem_free_blocks(inode, 1);
+					error = -ENOMEM;
+					goto failed;
+				}
+				SetPageSwapBacked(filepage);
 
-			/* Precharge page while we can wait, compensate after */
-			error = mem_cgroup_cache_charge(filepage, current->mm,
-					GFP_KERNEL);
-			if (error) {
-				page_cache_release(filepage);
-				shmem_unacct_blocks(info->flags, 1);
-				shmem_free_blocks(inode, 1);
-				filepage = NULL;
-				goto failed;
+				/*
+				 * Precharge page while we can wait, compensate
+				 * after
+				 */
+				error = mem_cgroup_cache_charge(filepage,
+					current->mm, GFP_KERNEL);
+				if (error) {
+					page_cache_release(filepage);
+					shmem_unacct_blocks(info->flags, 1);
+					shmem_free_blocks(inode, 1);
+					filepage = NULL;
+					goto failed;
+				}
+
+				spin_lock(&info->lock);
+			} else {
+				filepage = prealloc_page;
+				prealloc_page = NULL;
+				SetPageSwapBacked(filepage);
 			}
 
-			spin_lock(&info->lock);
 			entry = shmem_swp_alloc(info, idx, sgp);
 			if (IS_ERR(entry))
 				error = PTR_ERR(entry);
@@ -1467,12 +1488,18 @@ repeat:
 	}
 done:
 	*pagep = filepage;
-	return 0;
+	error = 0;
+	goto out;
 
 failed:
 	if (*pagep != filepage) {
 		unlock_page(filepage);
 		page_cache_release(filepage);
+	}
+out:
+	if (prealloc_page) {
+		mem_cgroup_uncharge_cache_page(prealloc_page);
+		page_cache_release(prealloc_page);
 	}
 	return error;
 }
@@ -1824,11 +1851,15 @@ shmem_mknod(struct inode *dir, struct dentry *dentry, int mode, dev_t dev)
 				return error;
 			}
 		}
-		error = shmem_acl_init(inode, dir);
+#ifdef CONFIG_TMPFS_POSIX_ACL
+		error = generic_acl_init(inode, dir);
 		if (error) {
 			iput(inode);
 			return error;
 		}
+#else
+		error = 0;
+#endif
 		if (dir->i_mode & S_ISGID) {
 			inode->i_gid = dir->i_gid;
 			if (S_ISDIR(mode))
@@ -2043,39 +2074,40 @@ static const struct inode_operations shmem_symlink_inode_operations = {
  * filesystem level, though.
  */
 
-static size_t shmem_xattr_security_list(struct inode *inode, char *list,
+static size_t shmem_xattr_security_list(struct dentry *dentry, char *list,
 					size_t list_len, const char *name,
-					size_t name_len)
+					size_t name_len, int handler_flags)
 {
-	return security_inode_listsecurity(inode, list, list_len);
+	return security_inode_listsecurity(dentry->d_inode, list, list_len);
 }
 
-static int shmem_xattr_security_get(struct inode *inode, const char *name,
-				    void *buffer, size_t size)
-{
-	if (strcmp(name, "") == 0)
-		return -EINVAL;
-	return xattr_getsecurity(inode, name, buffer, size);
-}
-
-static int shmem_xattr_security_set(struct inode *inode, const char *name,
-				    const void *value, size_t size, int flags)
+static int shmem_xattr_security_get(struct dentry *dentry, const char *name,
+		void *buffer, size_t size, int handler_flags)
 {
 	if (strcmp(name, "") == 0)
 		return -EINVAL;
-	return security_inode_setsecurity(inode, name, value, size, flags);
+	return xattr_getsecurity(dentry->d_inode, name, buffer, size);
 }
 
-static struct xattr_handler shmem_xattr_security_handler = {
+static int shmem_xattr_security_set(struct dentry *dentry, const char *name,
+		const void *value, size_t size, int flags, int handler_flags)
+{
+	if (strcmp(name, "") == 0)
+		return -EINVAL;
+	return security_inode_setsecurity(dentry->d_inode, name, value,
+					  size, flags);
+}
+
+static const struct xattr_handler shmem_xattr_security_handler = {
 	.prefix = XATTR_SECURITY_PREFIX,
 	.list   = shmem_xattr_security_list,
 	.get    = shmem_xattr_security_get,
 	.set    = shmem_xattr_security_set,
 };
 
-static struct xattr_handler *shmem_xattr_handlers[] = {
-	&shmem_xattr_acl_access_handler,
-	&shmem_xattr_acl_default_handler,
+static const struct xattr_handler *shmem_xattr_handlers[] = {
+	&generic_acl_access_handler,
+	&generic_acl_default_handler,
 	&shmem_xattr_security_handler,
 	NULL
 };
@@ -2462,7 +2494,7 @@ static const struct inode_operations shmem_inode_operations = {
 	.getxattr	= generic_getxattr,
 	.listxattr	= generic_listxattr,
 	.removexattr	= generic_removexattr,
-	.check_acl	= shmem_check_acl,
+	.check_acl	= generic_check_acl,
 #endif
 
 };
@@ -2485,7 +2517,7 @@ static const struct inode_operations shmem_dir_inode_operations = {
 	.getxattr	= generic_getxattr,
 	.listxattr	= generic_listxattr,
 	.removexattr	= generic_removexattr,
-	.check_acl	= shmem_check_acl,
+	.check_acl	= generic_check_acl,
 #endif
 };
 
@@ -2496,7 +2528,7 @@ static const struct inode_operations shmem_special_inode_operations = {
 	.getxattr	= generic_getxattr,
 	.listxattr	= generic_listxattr,
 	.removexattr	= generic_removexattr,
-	.check_acl	= shmem_check_acl,
+	.check_acl	= generic_check_acl,
 #endif
 };
 
@@ -2655,32 +2687,29 @@ struct file *shmem_file_setup(const char *name, loff_t size, unsigned long flags
 	if (!dentry)
 		goto put_memory;
 
-	error = -ENFILE;
-	file = get_empty_filp();
-	if (!file)
-		goto put_dentry;
-
 	error = -ENOSPC;
 	inode = shmem_get_inode(root->d_sb, S_IFREG | S_IRWXUGO, 0, flags);
 	if (!inode)
-		goto close_file;
+		goto put_dentry;
 
 	d_instantiate(dentry, inode);
 	inode->i_size = size;
 	inode->i_nlink = 0;	/* It is unlinked */
-	init_file(file, shm_mnt, dentry, FMODE_WRITE | FMODE_READ,
-		  &shmem_file_operations);
-
 #ifndef CONFIG_MMU
 	error = ramfs_nommu_expand_for_mapping(inode, size);
 	if (error)
-		goto close_file;
+		goto put_dentry;
 #endif
+
+	error = -ENFILE;
+	file = alloc_file(shm_mnt, dentry, FMODE_WRITE | FMODE_READ,
+		  &shmem_file_operations);
+	if (!file)
+		goto put_dentry;
+
 	ima_counts_get(file);
 	return file;
 
-close_file:
-	put_filp(file);
 put_dentry:
 	dput(dentry);
 put_memory:

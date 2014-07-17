@@ -314,6 +314,7 @@ struct inodes_stat_t {
 #define BLKIOOPT _IO(0x12,121)
 #define BLKALIGNOFF _IO(0x12,122)
 #define BLKPBSZGET _IO(0x12,123)
+#define BLKDISCARDZEROES _IO(0x12,124)
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
@@ -1347,7 +1348,7 @@ struct super_block {
 #ifdef CONFIG_SECURITY
 	void                    *s_security;
 #endif
-	struct xattr_handler	**s_xattr;
+	const struct xattr_handler **s_xattr;
 
 	struct list_head	s_inodes;	/* all inodes */
 	struct hlist_head	s_anon;		/* anonymous dentries for (nfs) exporting */

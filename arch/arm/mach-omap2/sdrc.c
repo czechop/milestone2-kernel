@@ -159,6 +159,7 @@ void __init omap2_sdrc_init(struct omap_sdrc_params *sdrc_cs0,
 	l = (1 << SDRC_POWER_SRFRONRESET) |
 		(1 << SDRC_POWER_EXTCLKDIS_SHIFT) |
 		(1 << SDRC_POWER_PAGEPOLICY_SHIFT);
+
 	/* Remove Errata work around for OMAP3630 only
 	 * It is corrected,enable Power Down mode for power saving
 	 */
